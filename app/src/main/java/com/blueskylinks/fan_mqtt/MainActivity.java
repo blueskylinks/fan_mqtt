@@ -17,6 +17,7 @@ import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.ParcelUuid;
 import android.support.annotation.RequiresApi;
@@ -25,40 +26,38 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
-import android.widget.Button;
-
+import android.widget.CompoundButton;
+import android.widget.Switch;
+import android.widget.TextView;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
-
+import org.json.JSONException;
+import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
     byte sc1[];
-    int st=-1;
-    int ms[];
+    int j;
     MqttClient sampleClient;
-    MqttMessage Mmessage;
-    int count=0;
+    TextView tv;
+    MqttMessage Mmessage1;
+    Switch simpleswitch1;
+    Switch simpleswitch2;
     int lr[]=new int[6];
-    private BluetoothGatt mGatt;
     private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
     BluetoothLeScanner scanner;
     private BluetoothDevice ble_device;
     ScanRecord scan_rec;
-    public static String nrf_service = "000000f1-0000-1000-8000-00805f9b34fb";
-    public final static UUID NRF_UUID_SERVICE = UUID.fromString(nrf_service);
-
-    public BluetoothGattCharacteristic characteristicTX;
-
-    public static String nrf_tx = "0000f102-0000-1000-8000-00805f9b34fb";
-    public final static UUID NRF_UUID_TX = UUID.fromString(nrf_tx);
-
+    SharedPreferences sharedPreferences1;
+    SharedPreferences sharedPreferences2;
+    boolean value1 = true;
+    boolean value2 = true;
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,13 +68,47 @@ public class MainActivity extends AppCompatActivity {
         ActivityCompat.requestPermissions(this,
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION},200);
         initialize();
+     mqtt_connect();
+
+        simpleswitch1=findViewById(R.id.switch1);
+        simpleswitch2=findViewById(R.id.switch2);
+        sharedPreferences1 = getSharedPreferences("isChecked1", 0);
+        value1 = sharedPreferences1.getBoolean("isChecked1", value1); // retrieve the value of your key
+
+        sharedPreferences2 = getSharedPreferences("isChecked", 0);
+        value2 = sharedPreferences2.getBoolean("isChecked", value2); // retrieve the value of your key
+
+        simpleswitch1.setChecked(value1);
+        simpleswitch1.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                        if (isChecked) { isChecked=true; startscand();simpleswitch2.setClickable(true);sharedPreferences1.edit().putBoolean("isChecked1", true).apply(); }
+                        else { stopscand();simpleswitch2.setClickable(false);sharedPreferences1.edit().putBoolean("isChecked1", false).apply();}
+                    }
+                }
+        );
+
+        if( simpleswitch1.isChecked()){
+            startscand();
+        }
+       simpleswitch2.setChecked(value2);
+            simpleswitch2.setOnCheckedChangeListener(
+                    new CompoundButton.OnCheckedChangeListener() {
+                        @Override
+                        public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                            if (isChecked) {isChecked = true;
+                                sharedPreferences2.edit().putBoolean("isChecked", true).apply();
+                            } else sharedPreferences2.edit().putBoolean("isChecked", false).apply();
+                        }
+                    }
+            );
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     @Override
     protected void onResume(){
         super.onResume();
-        startscand();
     }
 
       @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -139,23 +172,21 @@ public class MainActivity extends AppCompatActivity {
             scan_rec = result.getScanRecord();
             Log.i("Scan result",String.valueOf(rssi));
             Log.i("record",scan_rec.toString());
-
+            tv=findViewById(R.id.tv);
+            tv.setText(String.valueOf(rssi));
             sc1=scan_rec.getManufacturerSpecificData(0);
             for (int i=0;i<sc1.length; i++){
-                //  Log.i("Data-----:", String.valueOf(sc1[i]));
                 lr[i]=sc1[i];
             }
-           // ms=sc1[0];
             ble_device = result.getDevice();
-            try {
-                Thread.sleep(10000);
-               msg_pub();
-                Log.i("..","BackGround Message sc1[0]=1");
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (MqttException e) {
-                e.printStackTrace();
+            if(simpleswitch2.isChecked()) {
+                try {
+                    if (j != lr[0]) msg_pub();
+                } catch (MqttException e) {
+                    e.printStackTrace();
+                }
             }
+            else return;
         }
     };
 
@@ -165,81 +196,7 @@ public class MainActivity extends AppCompatActivity {
         scanner.stopScan(mcallback);
     }
 
-
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public void connect_device(View view) {
-      //  button  =findViewById(R.id.button8);
-        stopscand();
-        if (ble_device!=null){
-            mGatt = ble_device.connectGatt(this, false, gattCallback);
-            Log.i("BLE", "Device Connected...");
-          //  button.setText("Connected");
-        }
-       // else open();
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void disconnect() {
-        mGatt.disconnect();
-    }
-
-
-    //===========================================================================
-    public BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
-        @Override
-        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-            Log.i("onConnectionStateChange", "Status: " + newState);
-
-            switch (newState) {
-                case BluetoothProfile.STATE_CONNECTED:
-                    Log.i("gattCallback", "STATE_CONNECTED");
-                    gatt.discoverServices();
-                    break;
-                case BluetoothProfile.STATE_DISCONNECTED:
-                    Log.i("gattCallback", "STATE_DISCONNECTED");
-                    Intent intent = new Intent();
-                    intent.setAction("CUSTOM_INTENT");
-                    intent.putExtra("D1", "STATE_DISCONNECTED");
-                    sendBroadcast(intent);
-                    break;
-                default:
-                    Log.i("gattCallback", "STATE_OTHER");
-            }
-        }
-
-        @Override
-        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            List<BluetoothGattService> services = gatt.getServices();
-            BluetoothGattService service1;
-            Log.i("onServicesDiscovered", services.toString());
-            service1=gatt.getService(NRF_UUID_SERVICE);
-            characteristicTX = services.get(2).getCharacteristic(NRF_UUID_TX);
-        }
-
-        @Override
-        public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-            Log.i("onCharacteristicRead", characteristic.toString());
-            final byte b1[]=characteristic.getValue();
-            for (int i=0;i<b1.length;i++){
-                Log.i(":",String.valueOf(b1[i]));
-            }
-        }
-
-
-        @Override
-        public void onCharacteristicWrite(BluetoothGatt gatt,BluetoothGattCharacteristic characteristic, int status) {
-            Log.i("onCharacteristicWrite??", characteristic.toString());
-            final byte b1[]=characteristic.getValue();
-            for (int i=0;i<b1.length;i++){
-                Log.i(":",String.valueOf(b1[i]));
-            }
-        }
-
-    };
+    //publishing msgs
     public void mqtt_connect(){
         String broker       = "tcp://13.126.9.228:1883";
         String clientId     = "4";
@@ -252,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
             Log.i("Connecting to broker: ", broker);
             sampleClient.connect(connOpts);
             Log.i("Connected", "C");
-            //sampleClient.subscribe("home");
+            //sampleClient.subscribe("test");
 
 
         } catch(MqttException me) {
@@ -267,16 +224,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void msg_pub()throws MqttException {
-        mqtt_connect();
         String topic = "home";
-        Mmessage = new MqttMessage();
-        for (int i = 0; i <= 2; i++) {
-            String jsonobj = String.valueOf(lr[i]);
-            Mmessage.setPayload(jsonobj.getBytes());
-            sampleClient.publish(topic, Mmessage);
-            Log.i("message sending ",String.valueOf(Mmessage));
+        Mmessage1 = new MqttMessage();
+        JSONObject jsonObject=new JSONObject();
+        try {
+            jsonObject.put("lr[0]",lr[0]);
+            jsonObject.put("lr[1]",lr[1]);
+            jsonObject.put("lr[2]",lr[2]);
+            String json=String.valueOf(jsonObject);
+            Mmessage1.setPayload(json.getBytes());
+            sampleClient.publish(topic, Mmessage1);
+            Log.i("message sending ",String.valueOf(Mmessage1));
+             j =jsonObject.getInt("lr[0]");
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }catch (MqttException e) {
+            e.printStackTrace();
         }
-
     }
 }
 
