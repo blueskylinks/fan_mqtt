@@ -68,7 +68,7 @@ public class MainActivity extends AppCompatActivity {
         ActivityCompat.requestPermissions(this,
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION},200);
         initialize();
-     mqtt_connect();
+        mqtt_connect();
 
         simpleswitch1=findViewById(R.id.switch1);
         simpleswitch2=findViewById(R.id.switch2);
@@ -109,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume(){
         super.onResume();
+
     }
 
       @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -145,16 +146,16 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void startscand() {
         Log.i("BLE------", "Start Scanning");
-        //final ParcelUuid UID_SERVICE =
+        final ParcelUuid UID_SERVICE =
         ParcelUuid.fromString("000000f1-0000-1000-8000-00805f9b34fb");
         scanner = mBluetoothAdapter.getBluetoothLeScanner();
         ScanFilter beaconFilter = new ScanFilter.Builder() // this filter will be used to get only specific device based on service UUID
-                //.setServiceUuid(UID_SERVICE)
+                .setServiceUuid(UID_SERVICE)
                 .build();
         ArrayList<ScanFilter> filters = new ArrayList<ScanFilter>();
         filters.add(beaconFilter);
         ScanSettings settings = new ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
                 .build();
         scanner.startScan(filters, settings, mcallback);
     }
@@ -181,7 +182,17 @@ public class MainActivity extends AppCompatActivity {
             ble_device = result.getDevice();
             if(simpleswitch2.isChecked()) {
                 try {
-                    if (j != lr[0]) msg_pub();
+                    if (j != lr[0]) {
+                        if(sampleClient.isConnected()){
+                            Log.i("Blue Test:", "MQTT is connected");
+                            msg_pub();
+                        }
+                        else{
+                            Log.i("Blue Test:", "Not connected ...............");
+                            mqtt_connect();
+                            msg_pub();
+                        }
+                    }
                 } catch (MqttException e) {
                     e.printStackTrace();
                 }
